@@ -1,0 +1,74 @@
+[
+  {
+    "id": "e1",
+    "sender_name": "Priya Nair",
+    "sender_email": "priya.nair@acmecorp.com",
+    "subject": "URGENT: Production outage impacting client demo tomorrow",
+    "body": "Hi team,\n\nWe just found out that the staging environment is throwing 500 errors on checkout, and we have the client demo scheduled for 9 AM tomorrow. Can someone please look into this tonight? I need a status update by 8 PM today at the latest, or we'll have to postpone the demo.\n\nThis is high visibility for the account, so I really need this fixed.\n\nThanks,\nPriya",
+    "timestamp": "2026-09-18T16:45:00",
+    "thread_id": null
+  },
+  {
+    "id": "e2",
+    "sender_name": "Daniel Cho",
+    "sender_email": "daniel.cho@vendorlogistics.com",
+    "subject": "Q4 Contract Renewal - Pricing Proposal Attached",
+    "body": "Hello,\n\nAs discussed, please find our updated pricing proposal for the Q4 contract renewal attached. We're proposing a 12% increase over last year's rate due to rising material costs, effective November 1st.\n\nCould you review and let us know if you'd like to schedule a call to discuss? We'd need your confirmation by October 5th to lock in the renewal timeline.\n\nBest regards,\nDaniel Cho\nAccount Manager",
+    "timestamp": "2026-09-17T11:20:00",
+    "thread_id": null
+  },
+  {
+    "id": "e3",
+    "sender_name": "Sarah Mitchell",
+    "sender_email": "sarah.m@teamco.com",
+    "subject": "Re: Team lunch next week?",
+    "body": "Sounds great! Thursday works for me. I'll book a table for 6 at Cafe Luna, 12:30 PM. See you all there!",
+    "timestamp": "2026-09-18T09:10:00",
+    "thread_id": "t-lunch-1"
+  },
+  {
+    "id": "e4",
+    "sender_name": "Marcus Webb",
+    "sender_email": "marcus.webb@clientfirm.com",
+    "subject": "Extremely disappointed with the delayed delivery",
+    "body": "I have to say I'm quite frustrated. This is the third time our shipment has been delayed without prior notice, and it's affecting our own commitments to customers. I need a clear explanation and a firm new delivery date by end of day, or we will need to reconsider this partnership going forward.",
+    "timestamp": "2026-09-18T08:05:00",
+    "thread_id": null
+  },
+  {
+    "id": "e5",
+    "sender_name": "Newsletter - DevWeekly",
+    "sender_email": "no-reply@devweekly.io",
+    "subject": "This week in tech: AI agents, new JS frameworks, and more",
+    "body": "Welcome to this week's DevWeekly roundup! Top stories: 1) The rise of autonomous coding agents, 2) Comparing the newest frontend frameworks, 3) A deep dive on vector databases. Read more on our site!",
+    "timestamp": "2026-09-17T07:00:00",
+    "thread_id": null
+  },
+  {
+    "id": "e6",
+    "sender_name": "Aisha Rahman",
+    "sender_email": "aisha.rahman@partnerorg.com",
+    "subject": "Can you confirm the meeting time for Monday?",
+    "body": "Hi, just confirming — are we still on for Monday at 3 PM to discuss the integration roadmap? Let me know if that time still works on your end.",
+    "timestamp": "2026-09-18T13:30:00",
+    "thread_id": null
+  },
+  {
+    "id": "e7",
+    "sender_name": "James Okoro",
+    "sender_email": "james.okoro@internal.com",
+    "subject": "Draft budget for next quarter - need your input",
+    "body": "Hi,\n\nI've put together a first draft of the Q1 budget. Could you review the marketing spend section and share your thoughts by Friday? I want to finalize it before the leadership review on Monday.\n\nAlso, do you think we should increase the events budget given the conference season coming up?\n\nThanks,\nJames",
+    "timestamp": "2026-09-16T14:00:00",
+    "thread_id": null
+  },
+  {
+    "id": "e8",
+    "sender_name": "Priya Nair",
+    "sender_email": "priya.nair@acmecorp.com",
+    "subject": "Re: URGENT: Production outage impacting client demo tomorrow",
+    "body": "Following up — were you able to take a look? The client just messaged asking if the demo is still on. I really need an answer within the hour.",
+    "timestamp": "2026-09-18T18:30:00",
+    "thread_id": "t-outage-1"
+  }
+]

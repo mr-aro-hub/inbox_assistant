@@ -1,0 +1,14 @@
+# Virtual environments — always build your own locally.
+# A venv hardcodes the creating machine's Python path in pyvenv.cfg
+# and will not work on anyone else's machine.
+.venv/
+venv/
+inboxenv/
+
+# Python bytecode caches
+__pycache__/
+*.pyc
+
+# Secrets — contains your Gemini API key. Never commit this.
+# .env.example is intentionally NOT ignored; it's the template to copy.
+.env
