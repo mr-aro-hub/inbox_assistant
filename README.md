@@ -1,6 +1,6 @@
-# AI Email Inbox Assistant — Hackathon Starter
+# AI Email Inbox Assistant
 
-## Setup (do this first, everyone)
+## Setup 
 
 ```bash
 cd inbox-assistant
@@ -15,8 +15,6 @@ Run the app:
 ```bash
 streamlit run main.py
 ```
-
-Then open http://localhost:8501.
 
 **Don't commit or share the venv.** Create your own locally — a venv built on one
 machine hardcodes that machine's Python path in `pyvenv.cfg` and breaks for
