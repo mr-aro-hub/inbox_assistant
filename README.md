@@ -4,7 +4,39 @@ This is  attempt at fixing that. It's a Streamlit app that reads an inbox, works
 
 Built on Google Gemini with Pydantic schemas, so every model response comes back as validated structured data rather than a blob of prose I'd have to parse.
 
+## Run locally
+
+From the project folder, create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies, then create a `.env` file from the supplied template and add
+your Gemini API key:
+
+```powershell
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Your `.env` file must contain:
+
+```text
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+Start Streamlit:
+
+```powershell
 streamlit run main.py
+```
+
+Open the URL shown in the terminal (normally `http://localhost:8501`). On first run,
+the app creates `data/inbox.db` automatically and seeds it from `data/emails.json`.
+The database is local-only and is ignored by Git.
+
 What it does
 Tells me what's urgent, and why
 Every email gets a summary, a priority, the action items with their deadlines, the sender's emotional state, and the tone a reply should take.

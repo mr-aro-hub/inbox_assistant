@@ -12,3 +12,6 @@ __pycache__/
 # Secrets — contains your Gemini API key. Never commit this.
 # .env.example is intentionally NOT ignored; it's the template to copy.
 .env
+
+# Local runtime data; may contain inbox content and must not be committed.
+data/inbox.db

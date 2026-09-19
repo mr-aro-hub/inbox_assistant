@@ -10,7 +10,8 @@ import streamlit as st
 
 import ui
 import calendar_export
-from schemas import Email
+from schemas import CalendarPlan, DraftReply, Email, EmailAnalysis
+from storage import InboxRepository
 from llm_logic import (
     analyze_email,
     draft_reply,
@@ -36,7 +37,8 @@ def load_emails():
     return [Email.model_validate(e) for e in raw]
 
 
-emails = load_emails()
+repository = InboxRepository()
+emails = repository.seed_emails(load_emails())
 
 # session cache so we don't re-call the LLM every rerun
 if "analysis_cache" not in st.session_state:
@@ -46,27 +48,52 @@ if "draft_cache" not in st.session_state:
 if "calendar_cache" not in st.session_state:
     st.session_state.calendar_cache = {}
 
-
-def get_analysis(email: Email):
+# Restore durable analysis results so the inbox health view survives an app restart.
+for email in emails:
     if email.id not in st.session_state.analysis_cache:
+        saved_analysis = repository.get_analysis(email.id)
+        if saved_analysis:
+            st.session_state.analysis_cache[email.id] = saved_analysis
+
+
+def get_analysis(email: Email, refresh: bool = False):
+    if email.id not in st.session_state.analysis_cache:
+        if not refresh:
+            saved_analysis = repository.get_analysis(email.id)
+            if saved_analysis:
+                st.session_state.analysis_cache[email.id] = saved_analysis
+                return saved_analysis
         with st.spinner("Analyzing email..."):
             st.session_state.analysis_cache[email.id] = analyze_email(email)
+            repository.save_analysis(email.id, st.session_state.analysis_cache[email.id])
     return st.session_state.analysis_cache[email.id]
 
 
-def get_draft(email: Email, analysis):
+def get_draft(email: Email, analysis, refresh: bool = False):
     if email.id not in st.session_state.draft_cache:
+        if not refresh:
+            saved_draft = repository.get_draft(email.id)
+            if saved_draft:
+                st.session_state.draft_cache[email.id] = saved_draft
+                return saved_draft
         with st.spinner("Drafting reply..."):
             st.session_state.draft_cache[email.id] = draft_reply(email, analysis)
+            repository.save_draft(email.id, st.session_state.draft_cache[email.id])
     return st.session_state.draft_cache[email.id]
 
 
-def get_calendar(email: Email, analysis):
+def get_calendar(email: Email, analysis, refresh: bool = False):
     if email.id not in st.session_state.calendar_cache:
+        if not refresh:
+            saved_plan = repository.get_calendar_plan(email.id)
+            if saved_plan:
+                st.session_state.calendar_cache[email.id] = saved_plan
+                return saved_plan
         with st.spinner("Finding dates..."):
             st.session_state.calendar_cache[email.id] = plan_calendar_events(
                 email, analysis
             )
+            repository.save_calendar_plan(email.id, st.session_state.calendar_cache[email.id])
     return st.session_state.calendar_cache[email.id]
 
 
@@ -215,7 +242,7 @@ with col_detail:
 
     if st.button("Analyze this email", key="analyze_btn"):
         st.session_state.analysis_cache.pop(selected_email.id, None)  # force refresh
-        get_analysis(selected_email)
+        get_analysis(selected_email, refresh=True)
         # the inbox list renders before this column, so it would otherwise keep
         # showing the email under "Unanalyzed" until the next click. The result
         # is cached, so this rerun costs no API call.
@@ -246,7 +273,7 @@ with col_detail:
 
         if st.button("Draft a reply", key="draft_btn"):
             st.session_state.draft_cache.pop(selected_email.id, None)
-            get_draft(selected_email, analysis)
+            get_draft(selected_email, analysis, refresh=True)
 
         draft = st.session_state.draft_cache.get(selected_email.id)
         if draft:
@@ -288,7 +315,7 @@ with st.sidebar:
 
         if st.button("Add to calendar", key="calendar_btn"):
             st.session_state.calendar_cache.pop(selected_email.id, None)
-            get_calendar(selected_email, analysis)
+            get_calendar(selected_email, analysis, refresh=True)
 
         plan = st.session_state.calendar_cache.get(selected_email.id)
 
