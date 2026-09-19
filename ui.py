@@ -10,6 +10,121 @@ plain values and returns an HTML string.
 
 from html import escape
 from urllib.parse import quote
+import calendar as pycalendar
+from datetime import date
+
+def mini_calendar(
+    year: int,
+    month: int,
+    events: list[dict],
+) -> str:
+
+    cal = pycalendar.Calendar(firstweekday=0)
+
+    priority_rank = {
+        "Urgent": 4,
+        "High": 3,
+        "Normal": 2,
+        "Low": 1,
+    }
+
+    event_days = {}
+
+    for item in events:
+
+        day = item["start"].date()
+
+        if day.year != year or day.month != month:
+            continue
+
+        priority = item.get(
+            "priority",
+            "Normal",
+        )
+
+        existing = event_days.get(day.day)
+
+        # Keep the highest-priority event for that day
+        if (
+            existing is None
+            or priority_rank.get(priority, 0)
+            > priority_rank.get(existing, 0)
+        ):
+            event_days[day.day] = priority
+
+    month_name = pycalendar.month_name[month]
+    today = date.today()
+
+    parts = [
+        '<div class="mini-calendar">',
+        '<div class="mini-cal-header">',
+        f'<span>{escape(month_name)} {year}</span>',
+        '</div>',
+
+        '<div class="mini-cal-weekdays">',
+        '<span>Mo</span>',
+        '<span>Tu</span>',
+        '<span>We</span>',
+        '<span>Th</span>',
+        '<span>Fr</span>',
+        '<span>Sa</span>',
+        '<span>Su</span>',
+        '</div>',
+
+        '<div class="mini-cal-grid">',
+    ]
+
+    for week in cal.monthdayscalendar(year, month):
+
+        for day in week:
+
+            if day == 0:
+                parts.append(
+                    '<div class="mini-cal-day empty"></div>'
+                )
+                continue
+
+            current = date(year, month, day)
+
+            classes = ["mini-cal-day"]
+
+            if current == today:
+                classes.append("today")
+
+            priority = event_days.get(day)
+
+            if priority:
+                classes.append("has-event")
+
+            color = (
+                PRIORITY_COLOR.get(
+                    priority,
+                    GREY,
+                )
+                if priority
+                else ""
+            )
+
+            marker = (
+                f'<span class="event-dot" '
+                f'style="background:{color}"></span>'
+                if priority
+                else ""
+            )
+
+            parts.append(
+                f'<div class="{" ".join(classes)}">'
+                f'<span class="day-number">{day}</span>'
+                f'{marker}'
+                '</div>'
+            )
+
+    parts.extend([
+        '</div>',
+        '</div>',
+    ])
+
+    return "".join(parts)
 
 # ---------- Palette ----------
 # Priority / sentiment / confidence all reuse this ramp so a colour
@@ -187,12 +302,30 @@ def when_label(start, end, all_day: bool) -> str:
     )
 
 
-def calendar_item(title: str, when: str, source: str) -> str:
+def calendar_item(
+    title: str,
+    when: str,
+    source: str,
+    priority: str = "Normal",
+) -> str:
+
+    color = PRIORITY_COLOR.get(
+        priority,
+        GREY,
+    )
+
     return (
         '<div class="cal-item">'
         f'<div class="cal-title">{escape(title)}</div>'
-        f'<div class="cal-when"><span class="dot"></span>{escape(when)}</div>'
-        + (f'<div class="cal-src">{escape(source)}</div>' if source else "")
+        f'<div class="cal-when">'
+        f'<span class="dot" style="background:{color}"></span>'
+        f'{escape(when)}'
+        f'</div>'
+        + (
+            f'<div class="cal-src">{escape(source)}</div>'
+            if source
+            else ""
+        )
         + "</div>"
     )
 
@@ -392,7 +525,6 @@ footer,#MainMenu{display:none;}
   display:flex;align-items:center;gap:6px;
   font-size:11px;color:var(--t2);margin-top:3px;
 }
-.cal-when .dot{background:var(--accent);}
 .cal-src{font-size:10.5px;color:var(--t3);margin-top:3px;line-height:1.4;}
 
 /* ---------- buttons ---------- */
@@ -540,5 +672,86 @@ hr,[data-testid="stDivider"]{border-color:var(--line)!important;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:5px;}
 ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.15);}
 ::-webkit-scrollbar-track{background:transparent;}
+
+/* ---------- mini calendar ---------- */
+
+.mini-calendar{
+  margin:4px 4px 14px;
+}
+
+.mini-cal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:4px 0 10px;
+  color:var(--t1);
+  font-size:12.5px;
+  font-weight:550;
+}
+
+.mini-cal-weekdays,
+.mini-cal-grid{
+  display:grid;
+  grid-template-columns:repeat(7, 1fr);
+  text-align:center;
+}
+
+.mini-cal-weekdays{
+  margin-bottom:4px;
+}
+
+.mini-cal-weekdays span{
+  color:var(--t3);
+  font-size:9.5px;
+  font-weight:500;
+}
+
+.mini-cal-day{
+  position:relative;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--t2);
+  font-size:10.5px;
+}
+
+.mini-cal-day.empty{
+  visibility:hidden;
+}
+
+.mini-cal-day .day-number{
+  position:relative;
+  z-index:2;
+}
+
+.mini-cal-day.today .day-number{
+  color:var(--t1);
+  font-weight:600;
+  background:var(--row-on);
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.mini-cal-day.has-event{
+  color:var(--t1);
+}
+
+.event-dot{
+  position:absolute;
+  bottom:2px;
+  left:50%;
+  transform:translateX(-50%);
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  background:var(--accent);
+}
+
+
 </style>
 """

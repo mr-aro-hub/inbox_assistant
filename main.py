@@ -7,11 +7,13 @@ Behaviour lives here; the stylesheet and HTML builders live in ui.py.
 
 import json
 import streamlit as st
-
+from datetime import date
 import ui
+def html(content):
+    st.markdown(content, unsafe_allow_html=True)
+
 import calendar_export
-from schemas import CalendarPlan, DraftReply, Email, EmailAnalysis
-from storage import InboxRepository
+from schemas import Email
 from llm_logic import (
     analyze_email,
     draft_reply,
@@ -37,8 +39,7 @@ def load_emails():
     return [Email.model_validate(e) for e in raw]
 
 
-repository = InboxRepository()
-emails = repository.seed_emails(load_emails())
+emails = load_emails()
 
 # session cache so we don't re-call the LLM every rerun
 if "analysis_cache" not in st.session_state:
@@ -48,57 +49,79 @@ if "draft_cache" not in st.session_state:
 if "calendar_cache" not in st.session_state:
     st.session_state.calendar_cache = {}
 
-# Restore durable analysis results so the inbox health view survives an app restart.
-for email in emails:
-    if email.id not in st.session_state.analysis_cache:
-        saved_analysis = repository.get_analysis(email.id)
-        if saved_analysis:
-            st.session_state.analysis_cache[email.id] = saved_analysis
 
-
-def get_analysis(email: Email, refresh: bool = False):
+def get_analysis(email: Email):
     if email.id not in st.session_state.analysis_cache:
-        if not refresh:
-            saved_analysis = repository.get_analysis(email.id)
-            if saved_analysis:
-                st.session_state.analysis_cache[email.id] = saved_analysis
-                return saved_analysis
         with st.spinner("Analyzing email..."):
             st.session_state.analysis_cache[email.id] = analyze_email(email)
-            repository.save_analysis(email.id, st.session_state.analysis_cache[email.id])
     return st.session_state.analysis_cache[email.id]
 
 
-def get_draft(email: Email, analysis, refresh: bool = False):
+def get_draft(email: Email, analysis):
     if email.id not in st.session_state.draft_cache:
-        if not refresh:
-            saved_draft = repository.get_draft(email.id)
-            if saved_draft:
-                st.session_state.draft_cache[email.id] = saved_draft
-                return saved_draft
         with st.spinner("Drafting reply..."):
             st.session_state.draft_cache[email.id] = draft_reply(email, analysis)
-            repository.save_draft(email.id, st.session_state.draft_cache[email.id])
     return st.session_state.draft_cache[email.id]
 
 
-def get_calendar(email: Email, analysis, refresh: bool = False):
+def get_calendar(email: Email, analysis):
     if email.id not in st.session_state.calendar_cache:
-        if not refresh:
-            saved_plan = repository.get_calendar_plan(email.id)
-            if saved_plan:
-                st.session_state.calendar_cache[email.id] = saved_plan
-                return saved_plan
         with st.spinner("Finding dates..."):
             st.session_state.calendar_cache[email.id] = plan_calendar_events(
                 email, analysis
             )
-            repository.save_calendar_plan(email.id, st.session_state.calendar_cache[email.id])
     return st.session_state.calendar_cache[email.id]
 
+def get_all_calendar_events():
+    """Collect calendar events from all analyzed emails."""
 
-def html(fragment: str):
-    st.markdown(fragment, unsafe_allow_html=True)
+    rows = []
+
+    priority_rank = {
+        "Urgent": 4,
+        "High": 3,
+        "Normal": 2,
+        "Low": 1,
+    }
+
+    for email_id, plan in st.session_state.calendar_cache.items():
+
+        email = next(
+            (e for e in emails if e.id == email_id),
+            None
+        )
+
+        if not email:
+            continue
+
+        analysis = st.session_state.analysis_cache.get(email_id)
+
+        priority = (
+            analysis.priority
+            if analysis
+            else "Normal"
+        )
+
+        for event, start, end in calendar_export.usable_events(
+            plan.events
+        ):
+            rows.append({
+                "email_id": email_id,
+                "email_subject": email.subject,
+                "sender": email.sender_name,
+                "event": event,
+                "start": start,
+                "end": end,
+                "priority": priority,
+            })
+
+    return sorted(
+        rows,
+        key=lambda x: (
+            x["start"],
+            -priority_rank.get(x["priority"], 0),
+        )
+    )
 
 
 # ---------- Sidebar: Inbox Health Score ----------
@@ -107,8 +130,37 @@ with st.sidebar:
     html(ui.workspace_header("Inbox Assistant"))
 
     if st.button("Analyze all emails", key="analyze_all"):
-        for e in emails:
-            get_analysis(e)
+
+        progress = st.progress(0)
+
+        for i, e in enumerate(emails):
+
+            try:
+                # 1. Analyze the email
+                analysis = get_analysis(e)
+
+                # 2. Automatically extract calendar events
+                get_calendar(e, analysis)
+
+                # 3. Update progress
+                progress.progress((i + 1) / len(emails))
+
+            except Exception as ex:
+
+                if "429" in str(ex) or "RESOURCE_EXHAUSTED" in str(ex):
+
+                    st.warning(
+                        f"Gemini rate limit reached after {i} emails. "
+                        "Wait about 1 minute and click 'Analyze all emails' again."
+                    )
+
+                    break
+
+                raise
+
+        progress.empty()
+
+        st.rerun()
 
     analyzed = [
         st.session_state.analysis_cache[e.id]
@@ -140,9 +192,6 @@ with st.sidebar:
             '<div class="side-note">Click &ldquo;Analyze all emails&rdquo; '
             "to see your inbox health score.</div>"
         )
-
-# the Calendar section and the footer are written to the sidebar further down,
-# once the detail pane has resolved which email is selected and analyzed
 
 
 # ---------- Ask My Inbox ----------
@@ -241,11 +290,24 @@ with col_detail:
     html('<div class="rule"></div>')
 
     if st.button("Analyze this email", key="analyze_btn"):
-        st.session_state.analysis_cache.pop(selected_email.id, None)  # force refresh
-        get_analysis(selected_email, refresh=True)
-        # the inbox list renders before this column, so it would otherwise keep
-        # showing the email under "Unanalyzed" until the next click. The result
-        # is cached, so this rerun costs no API call.
+
+        st.session_state.analysis_cache.pop(
+            selected_email.id,
+            None
+        )
+
+        st.session_state.calendar_cache.pop(
+            selected_email.id,
+            None
+        )
+
+        analysis = get_analysis(selected_email)
+
+        get_calendar(
+            selected_email,
+            analysis
+        )
+
         st.rerun()
 
     analysis = st.session_state.analysis_cache.get(selected_email.id)
@@ -273,7 +335,7 @@ with col_detail:
 
         if st.button("Draft a reply", key="draft_btn"):
             st.session_state.draft_cache.pop(selected_email.id, None)
-            get_draft(selected_email, analysis, refresh=True)
+            get_draft(selected_email, analysis)
 
         draft = st.session_state.draft_cache.get(selected_email.id)
         if draft:
@@ -298,54 +360,61 @@ with col_detail:
         )
 
 
-# ---------- Sidebar: Add to calendar ----------
-# Written here rather than in the sidebar block above so it reflects the email
-# you just analyzed, instead of trailing a rerun behind it.
+# ---------- Sidebar: Calendar ----------
 
 with st.sidebar:
+
     html(ui.section_label("Calendar"))
 
-    if not analysis:
-        html(
-            '<div class="side-note">Analyze an email to pull its dates '
-            "out into calendar events.</div>"
-        )
-    else:
-        html(f'<div class="cal-context">{selected_email.subject}</div>')
+    calendar_events = get_all_calendar_events()
 
-        if st.button("Add to calendar", key="calendar_btn"):
-            st.session_state.calendar_cache.pop(selected_email.id, None)
-            get_calendar(selected_email, analysis, refresh=True)
+    today = date.today()
 
-        plan = st.session_state.calendar_cache.get(selected_email.id)
-
-        if plan:
-            usable = calendar_export.usable_events(plan.events)
-
-            if usable:
-                for event, start, end in usable:
-                    html(
-                        ui.calendar_item(
-                            event.title,
-                            ui.when_label(start, end, event.all_day),
-                            event.source,
-                        )
-                    )
-
-                st.download_button(
-                    f"Download .ics ({len(usable)})",
-                    data=calendar_export.build_ics(usable, selected_email.subject),
-                    file_name=f"{selected_email.id}-calendar.ics",
-                    mime="text/calendar",
-                    key="ics_dl",
-                )
-            else:
-                html(
-                    '<div class="side-note">Nothing in this email has a date '
-                    "concrete enough to schedule.</div>"
-                )
-
+    # Month calendar
     html(
-        f'<div class="side-foot">{len(emails)} emails in inbox '
-        f"&middot; analyzed {len(analyzed)}</div>"
+        ui.mini_calendar(
+            today.year,
+            today.month,
+            calendar_events,
+        )
     )
+
+    # Event list
+    month_events = [
+        item
+        for item in calendar_events
+        if item["start"].year == today.year
+        and item["start"].month == today.month
+    ]
+
+    if month_events:
+
+        html(
+            '<div class="section" style="padding-top:4px">'
+            'Upcoming'
+            '</div>'
+        )
+
+        for item in month_events[:4]:
+
+            html(
+                ui.calendar_item(
+                    item["event"].title,
+                    ui.when_label(
+                        item["start"],
+                        item["end"],
+                        item["event"].all_day,
+                    ),
+                    item["sender"],
+                    item["priority"],
+                )
+            )
+
+    else:
+
+        html(
+            '<div class="side-note">'
+            'No calendar events yet.'
+            '</div>'
+        )
+
