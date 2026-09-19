@@ -12,6 +12,3 @@ __pycache__/
 # Secrets — contains your Gemini API key. Never commit this.
 # .env.example is intentionally NOT ignored; it's the template to copy.
 .env
-
-# Runtime-only local inbox database. It may contain user email content.
-data/inbox.db

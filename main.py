@@ -10,8 +10,7 @@ import streamlit as st
 
 import ui
 import calendar_export
-from schemas import CalendarPlan, DraftReply, Email, EmailAnalysis
-from storage import InboxRepository
+from schemas import Email
 from llm_logic import (
     analyze_email,
     draft_reply,
@@ -37,8 +36,7 @@ def load_emails():
     return [Email.model_validate(e) for e in raw]
 
 
-repository = InboxRepository()
-emails = repository.seed_emails(load_emails())
+emails = load_emails()
 
 # session cache so we don't re-call the LLM every rerun
 if "analysis_cache" not in st.session_state:
@@ -48,50 +46,27 @@ if "draft_cache" not in st.session_state:
 if "calendar_cache" not in st.session_state:
     st.session_state.calendar_cache = {}
 
-# Restore locally persisted results once per browser session. This avoids another
-# model request after an app restart and makes the inbox health signal durable.
-for email in emails:
-    if email.id not in st.session_state.analysis_cache:
-        saved = repository.load(email.id, "analysis", EmailAnalysis)
-        if saved:
-            st.session_state.analysis_cache[email.id] = saved
-
 
 def get_analysis(email: Email):
     if email.id not in st.session_state.analysis_cache:
-        persisted = repository.load(email.id, "analysis", EmailAnalysis)
-        if persisted:
-            st.session_state.analysis_cache[email.id] = persisted
-            return persisted
         with st.spinner("Analyzing email..."):
             st.session_state.analysis_cache[email.id] = analyze_email(email)
-            repository.save(email.id, "analysis", st.session_state.analysis_cache[email.id])
     return st.session_state.analysis_cache[email.id]
 
 
 def get_draft(email: Email, analysis):
     if email.id not in st.session_state.draft_cache:
-        persisted = repository.load(email.id, "draft", DraftReply)
-        if persisted:
-            st.session_state.draft_cache[email.id] = persisted
-            return persisted
         with st.spinner("Drafting reply..."):
             st.session_state.draft_cache[email.id] = draft_reply(email, analysis)
-            repository.save(email.id, "draft", st.session_state.draft_cache[email.id])
     return st.session_state.draft_cache[email.id]
 
 
 def get_calendar(email: Email, analysis):
     if email.id not in st.session_state.calendar_cache:
-        persisted = repository.load(email.id, "calendar", CalendarPlan)
-        if persisted:
-            st.session_state.calendar_cache[email.id] = persisted
-            return persisted
         with st.spinner("Finding dates..."):
             st.session_state.calendar_cache[email.id] = plan_calendar_events(
                 email, analysis
             )
-            repository.save(email.id, "calendar", st.session_state.calendar_cache[email.id])
     return st.session_state.calendar_cache[email.id]
 
 
@@ -104,14 +79,7 @@ def html(fragment: str):
 with st.sidebar:
     html(ui.workspace_header("Inbox Assistant"))
 
-    allow_ai = st.checkbox(
-        "Allow redacted email content to be processed by Gemini",
-        help="Email addresses and phone numbers are redacted before requests. Generated results are stored locally in data/inbox.db.",
-    )
-    if not allow_ai:
-        html('<div class="side-note">AI actions are disabled until you consent to processing redacted content.</div>')
-
-    if st.button("Analyze all emails", key="analyze_all", disabled=not allow_ai):
+    if st.button("Analyze all emails", key="analyze_all"):
         for e in emails:
             get_analysis(e)
 
@@ -168,32 +136,27 @@ with ask_col:
     )
 
 with btn_col:
-    asked = st.button("Ask", key="ask_inbox_btn", type="primary", disabled=not allow_ai)
+    asked = st.button("Ask", key="ask_inbox_btn", type="primary")
 
 if asked:
     if not question.strip():
         html(ui.callout("Please enter a question.", "warn"))
     else:
-        try:
-            with st.spinner("Searching your inbox..."):
-                result = answer_inbox_question(question, emails)
-        except RuntimeError as error:
-            st.error(str(error))
-            result = None
+        with st.spinner("Searching your inbox..."):
+            result = answer_inbox_question(question, emails)
 
-        if result:
-            html('<div class="answer-wrap">')
-            html(ui.section_label("Answer"))
-            html(f'<div class="answer">{result.answer}</div>')
+        html('<div class="answer-wrap">')
+        html(ui.section_label("Answer"))
+        html(f'<div class="answer">{result.answer}</div>')
 
-            if result.sources:
-                html(ui.section_label("Sources"))
-                for source in result.sources:
-                    html(ui.source_row(source.subject, source.sender, source.email_id))
-            else:
-                html('<div class="empty">No supporting emails found.</div>')
+        if result.sources:
+            html(ui.section_label("Sources"))
+            for source in result.sources:
+                html(ui.source_row(source.subject, source.sender, source.email_id))
+        else:
+            html('<div class="empty">No supporting emails found.</div>')
 
-            html("</div>")
+        html("</div>")
 
 html('<div class="rule"></div>')
 
@@ -250,9 +213,8 @@ with col_detail:
     html(ui.mail_body(selected_email.body))
     html('<div class="rule"></div>')
 
-    if st.button("Analyze this email", key="analyze_btn", disabled=not allow_ai):
+    if st.button("Analyze this email", key="analyze_btn"):
         st.session_state.analysis_cache.pop(selected_email.id, None)  # force refresh
-        repository.clear(selected_email.id, "analysis")
         get_analysis(selected_email)
         # the inbox list renders before this column, so it would otherwise keep
         # showing the email under "Unanalyzed" until the next click. The result
@@ -282,9 +244,8 @@ with col_detail:
 
         html('<div class="rule"></div>')
 
-        if st.button("Draft a reply", key="draft_btn", disabled=not allow_ai):
+        if st.button("Draft a reply", key="draft_btn"):
             st.session_state.draft_cache.pop(selected_email.id, None)
-            repository.clear(selected_email.id, "draft")
             get_draft(selected_email, analysis)
 
         draft = st.session_state.draft_cache.get(selected_email.id)
@@ -325,9 +286,8 @@ with st.sidebar:
     else:
         html(f'<div class="cal-context">{selected_email.subject}</div>')
 
-        if st.button("Add to calendar", key="calendar_btn", disabled=not allow_ai):
+        if st.button("Add to calendar", key="calendar_btn"):
             st.session_state.calendar_cache.pop(selected_email.id, None)
-            repository.clear(selected_email.id, "calendar")
             get_calendar(selected_email, analysis)
 
         plan = st.session_state.calendar_cache.get(selected_email.id)
